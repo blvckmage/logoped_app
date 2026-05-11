@@ -1,0 +1,28 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - '8000:8000'
+    environment:
+      - DATABASE_URL=/app/speech_therapy.db
+      - SECRET_KEY=replace_me_with_a_secure_value
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - '4173:4173'
+    environment:
+      - VITE_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+env_file:
+  - .env.example

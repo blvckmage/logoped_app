@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcher from './LanguageSwitcher';
 import {
   Home, Mic, BarChart3, Stethoscope, History,
-  LogOut, User, Menu, X, Shield, LogIn,
+  LogOut, Menu, X, Shield, LogIn,
 } from 'lucide-react';
 import '../index.css';
 

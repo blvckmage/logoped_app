@@ -1,0 +1,131 @@
+/* ── ANIMAL ANIMATIONS ───────────────────────────────────── */
+
+/* Fox — bounces gently */
+.animal-fox {
+  animation: fox-bounce 3s ease-in-out infinite;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 8px 16px rgba(255,140,66,0.30));
+}
+@keyframes fox-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30%       { transform: translateY(-10px) rotate(-3deg); }
+  60%       { transform: translateY(-6px) rotate(2deg); }
+}
+
+/* Bear — sways left-right */
+.animal-bear {
+  animation: bear-sway 3.5s ease-in-out infinite;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 8px 16px rgba(200,149,108,0.30));
+}
+@keyframes bear-sway {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  25%       { transform: rotate(-4deg) translateY(-4px); }
+  75%       { transform: rotate(4deg) translateY(-4px); }
+}
+
+/* Owl — bobs up and blinks */
+.animal-owl {
+  animation: owl-bob 2.8s ease-in-out infinite;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 8px 16px rgba(139,111,190,0.30));
+}
+@keyframes owl-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40%       { transform: translateY(-8px) scale(1.03); }
+  70%       { transform: translateY(-4px) scale(1.01); }
+}
+
+/* Star decoration — spins and pulses */
+.star-decor {
+  animation: star-spin 4s linear infinite;
+  display: inline-block;
+}
+@keyframes star-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Heart decoration — floats up */
+.heart-decor {
+  animation: heart-float 2.5s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes heart-float {
+  0%, 100% { transform: translateY(0) scale(1); opacity: .8; }
+  50%       { transform: translateY(-8px) scale(1.15); opacity: 1; }
+}
+
+/* Note — wiggles */
+.note-decor {
+  animation: note-wiggle 2s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes note-wiggle {
+  0%, 100% { transform: rotate(-8deg) scale(1); }
+  50%       { transform: rotate(8deg) scale(1.1); }
+}
+
+/* ── HERO DECOR ELEMENTS ─────────────────────────────── */
+.hero-decor-fox   { position: absolute; bottom: -10px; left:  6%; animation: fox-bounce  3s   ease-in-out infinite; filter: drop-shadow(0 8px 20px rgba(255,140,66,0.25)); }
+.hero-decor-bear  { position: absolute; bottom: -10px; right: 6%; animation: bear-sway   3.5s ease-in-out infinite; filter: drop-shadow(0 8px 20px rgba(200,149,108,0.25)); }
+.hero-decor-owl   { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); animation: owl-bob 2.8s ease-in-out infinite; filter: drop-shadow(0 8px 20px rgba(139,111,190,0.25)); }
+
+/* Floating bubbles background */
+.hero-bubble {
+  position: absolute; border-radius: 50%; opacity: .4;
+  animation: bubble-float 6s ease-in-out infinite;
+}
+.hero-bubble-1 { width:80px; height:80px; background:radial-gradient(circle,var(--yellow),transparent); top:15%; left:5%;  animation-delay: 0s;   animation-duration:7s; }
+.hero-bubble-2 { width:50px; height:50px; background:radial-gradient(circle,var(--sky-l),transparent);  top:25%; right:8%; animation-delay:1.5s; animation-duration:8s; }
+.hero-bubble-3 { width:65px; height:65px; background:radial-gradient(circle,var(--mint),transparent);   bottom:20%; left:15%; animation-delay:3s; animation-duration:6s; }
+.hero-bubble-4 { width:40px; height:40px; background:radial-gradient(circle,var(--coral-l),transparent); bottom:30%; right:12%; animation-delay:.8s; animation-duration:9s; }
+
+@keyframes bubble-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-20px) scale(1.1); }
+}
+
+/* Stars scattered */
+.hero-star {
+  position: absolute;
+  animation: star-spin 5s linear infinite;
+}
+.hero-star-1 { top:12%; left:20%; animation-duration:4s; }
+.hero-star-2 { top:18%; right:22%; animation-duration:6s; animation-delay:1s; }
+.hero-star-3 { bottom:25%; left:28%; animation-duration:5s; animation-delay:2s; }
+
+/* Role card animals */
+.role-card-animal {
+  display: flex; justify-content: center;
+  margin-bottom: .5rem;
+  filter: none; /* handled per-animal */
+}
+
+/* ── RECORDING ANIMAL ───────────────────────────────── */
+/* Fox appears in trainer while recording */
+.trainer-mascot {
+  display: flex; justify-content: center; align-items: flex-end;
+  height: 90px; overflow: visible;
+}
+.trainer-mascot-inner { transition: transform .3s ease; }
+.trainer-mascot-inner.recording { animation: mascot-excited 0.4s ease-in-out infinite alternate; }
+@keyframes mascot-excited {
+  from { transform: scale(1) rotate(-5deg); }
+  to   { transform: scale(1.08) rotate(5deg); }
+}
+
+/* Confetti effect for success */
+.confetti-container {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; overflow: hidden; border-radius: inherit;
+}
+.confetti-piece {
+  position: absolute; width: 8px; height: 8px; border-radius: 2px;
+  animation: confetti-fall 1.5s ease-in forwards;
+}
+@keyframes confetti-fall {
+  0%   { opacity: 1; transform: translateY(-20px) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(120px) rotate(360deg); }
+}

@@ -1,6 +1,6 @@
-fastapi
-uvicorn[standard]
-python-multipart
-pydub
-torch
-transformers
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+pydub==0.25.1
+torch==2.5.1
+transformers==4.47.1

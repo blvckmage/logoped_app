@@ -1,23 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import { authByPin, getCurrentUser } from '../services/api';
-
-interface User {
-  id: number;
-  name: string;
-  role: 'child' | 'parent' | 'therapist';
-  pin_code: string | null;
-  email: string | null;
-  parent_id: number | null;
-  therapist_id: number | null;
-  age: number | null;
-  created_at: string;
-}
+import { loginWithEmail, loginWithPin, getCurrentUser, type User } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   error: string | null;
   login: (pinCode: string) => Promise<User>;
+  loginEmail: (email: string, password: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -25,19 +14,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('authUser');
-      return stored ? JSON.parse(stored) : null;
-    }
-    return null;
+    try {
+      const s = localStorage.getItem('authUser');
+      return s ? JSON.parse(s) : null;
+    } catch { return null; }
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-validate token on mount
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    const token = localStorage.getItem('authToken');
     if (!token || user) return;
-
     void (async () => {
       setIsLoading(true);
       try {
@@ -48,48 +36,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('authToken');
         localStorage.removeItem('authUser');
         setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
+      } finally { setIsLoading(false); }
     })();
-  }, [user]);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const _saveSession = (data: any): User => {
+    localStorage.setItem('authToken', data.access_token);
+    localStorage.setItem('authUser', JSON.stringify(data.user));
+    setUser(data.user);
+    setError(null);
+    return data.user;
+  };
 
   const login = useCallback(async (pinCode: string): Promise<User> => {
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true); setError(null);
     try {
-      const data = await authByPin(pinCode);
-      localStorage.setItem('authToken', data.access_token);
-      localStorage.setItem('authUser', JSON.stringify(data.user));
-      setUser(data.user);
-      return data.user;
+      return _saveSession(await loginWithPin(pinCode));
     } catch (err: any) {
-      const message = err.message || 'Неверный PIN-код';
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+      const msg = err.message || 'Неверный PIN-код';
+      setError(msg); throw err;
+    } finally { setIsLoading(false); }
+  }, []);
+
+  const loginEmail = useCallback(async (email: string, password: string): Promise<User> => {
+    setIsLoading(true); setError(null);
+    try {
+      return _saveSession(await loginWithEmail(email, password));
+    } catch (err: any) {
+      const msg = err.message || 'Неверный email или пароль';
+      setError(msg); throw err;
+    } finally { setIsLoading(false); }
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
-    setUser(null);
-    setError(null);
+    setUser(null); setError(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, error, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, error, login, loginEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 }

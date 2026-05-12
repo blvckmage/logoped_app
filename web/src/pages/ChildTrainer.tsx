@@ -15,12 +15,12 @@ interface SoundTarget {
 }
 
 const SOUND_TARGETS: SoundTarget[] = [
-  { id: 'R', letter: 'Р', word: 'Рама', examples: ['Рама', 'Рак', 'Рыба', 'Рука'] },
-  { id: 'L', letter: 'Л', word: 'Лампа', examples: ['Лампа', 'Луна', 'Ложка', 'Лиса'] },
-  { id: 'Q', letter: 'Қ', word: 'Қала', examples: ['Қала', 'Қар', 'Қол', 'Қас'] },
-  { id: 'S', letter: 'С', word: 'Сыр', examples: ['Сыр', 'Сөз', 'Сан', 'Су'] },
-  { id: 'SH', letter: 'Ш', word: 'Шар', examples: ['Шар', 'Шелек', 'Шаш', 'Шығу'] },
-  { id: 'CH', letter: 'Ч', word: 'Шаш', examples: ['Шаш', 'Шелек', 'Шар', 'Шығу'] },
+  { id: 'R',  letter: 'Р', word: 'Рама',  examples: ['Рама', 'Рак', 'Рыба', 'Рука'] },
+  { id: 'L',  letter: 'Л', word: 'Лампа', examples: ['Лампа', 'Луна', 'Ложка', 'Лиса'] },
+  { id: 'Q',  letter: 'Қ', word: 'Қала',  examples: ['Қала', 'Қар', 'Қол', 'Қас'] },
+  { id: 'S',  letter: 'С', word: 'Сыр',   examples: ['Сыр', 'Сөз', 'Сан', 'Су'] },
+  { id: 'SH', letter: 'Ш', word: 'Шар',   examples: ['Шар', 'Шелек', 'Шаш', 'Шығу'] },
+  { id: 'CH', letter: 'Ч', word: 'Чашка', examples: ['Чашка', 'Чай', 'Чудо', 'Часы'] },
 ];
 
 interface AnalysisResult {
@@ -160,7 +160,7 @@ function ChildTrainer() {
     <div className="trainer-page">
       <div className="page-header">
         <div className="page-header-left">
-          <button className="btn btn-ghost" onClick={() => navigate('/')} aria-label={t('app.toMain')} title={t('app.toMain')}>
+          <button id="trainer-back-btn" className="btn btn-ghost" onClick={() => navigate('/')} aria-label={t('app.toMain')} title={t('app.toMain')}>
             <ArrowLeft size={20} />
           </button>
         </div>
@@ -216,6 +216,7 @@ function ChildTrainer() {
                 />
               </svg>
               <button
+                id="record-btn"
                 className={`record-btn-circle ${isRecording ? 'recording' : ''}`}
                 onClick={handleToggleRecording}
                 disabled={isProcessing}

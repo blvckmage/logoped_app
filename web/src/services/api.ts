@@ -1,25 +1,48 @@
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
+export type UserRole = 'superadmin' | 'admin' | 'therapist' | 'parent' | 'child';
+
+export interface User {
+  id: number;
+  name: string;
+  role: UserRole;
+  email: string | null;
+  pin_code: string | null;
+  parent_id: number | null;
+  therapist_id: number | null;
+  created_by: number | null;
+  age: number | null;
+  is_active: number;
+  created_at: string;
+  // optional joined fields
+  total_attempts?: number;
+  avg_accuracy?: number;
+  last_active?: string | null;
+}
+
 interface RequestOptions {
   method?: string;
   body?: any;
   headers?: Record<string, string>;
+  skipAuth?: boolean;
 }
 
 async function request(endpoint: string, options: RequestOptions = {}) {
-  const { method = 'GET', body, headers = {} } = options;
-
+  const { method = 'GET', body, headers = {}, skipAuth = false } = options;
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+
   const config: RequestInit = {
     method,
     headers: {
       ...headers,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(!skipAuth && token ? { Authorization: `Bearer ${token}` } : {}),
     },
   };
 
   if (body) {
     if (body instanceof FormData) {
+      config.body = body;
+    } else if (typeof body === 'string') {
       config.body = body;
     } else {
       config.headers = { ...config.headers, 'Content-Type': 'application/json' };
@@ -28,31 +51,49 @@ async function request(endpoint: string, options: RequestOptions = {}) {
   }
 
   const res = await fetch(`${BACKEND_URL}${endpoint}`, config);
-
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({ message: 'Ошибка сервера' }));
-    throw new Error(errorBody.detail || errorBody.message || `HTTP ${res.status}`);
+    const err = await res.json().catch(() => ({ detail: 'Ошибка сервера' }));
+    throw new Error(err.detail || err.message || `HTTP ${res.status}`);
   }
-
   return res.json();
 }
 
-function encodeForm(data: Record<string, any>): URLSearchParams {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined && value !== null) {
-      params.append(key, String(value));
-    }
+function form(data: Record<string, any>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined && v !== null) p.append(k, String(v));
   }
-  return params;
+  return p.toString();
 }
 
-// Auth
-export function authByPin(pinCode: string) {
+// ── Auth ─────────────────────────────────────
+export function loginWithEmail(email: string, password: string) {
+  return request('/auth/login/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form({ email, password }),
+    skipAuth: true,
+  });
+}
+
+export function loginWithPin(pinCode: string) {
   return request('/auth/pin/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: encodeForm({ pin_code: pinCode }).toString(),
+    body: form({ pin_code: pinCode }),
+    skipAuth: true,
+  });
+}
+
+// keep old name for backward compat
+export const authByPin = loginWithPin;
+
+export function registerParent(name: string, email: string, password: string) {
+  return request('/auth/register/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form({ name, email, password }),
+    skipAuth: true,
   });
 }
 
@@ -60,12 +101,22 @@ export function getCurrentUser() {
   return request('/auth/me/');
 }
 
-// Users
+// ── Users ─────────────────────────────────────
+export function getUsers(role?: string) {
+  const q = role ? `?role=${role}` : '';
+  return request(`/users/${q}`);
+}
+
+export function getUser(userId: number) {
+  return request(`/users/${userId}/`);
+}
+
 export function createUser(data: {
   name: string;
-  role: 'child' | 'parent' | 'therapist';
-  pin_code?: string;
+  role: string;
   email?: string;
+  password?: string;
+  pin_code?: string;
   parent_id?: number;
   therapist_id?: number;
   age?: number;
@@ -73,19 +124,45 @@ export function createUser(data: {
   return request('/users/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: encodeForm(data).toString(),
+    body: form(data),
   });
 }
 
-export function getUsers(role?: string) {
-  const query = role ? `?role=${role}` : '';
-  return request(`/users/${query}`);
+export function updateUser(userId: number, data: Partial<{
+  name: string; email: string; age: number; therapist_id: number; is_active: number;
+}>) {
+  return request(`/users/${userId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form(data),
+  });
 }
 
-export function getUser(userId: number) {
-  return request(`/users/${userId}/`);
+export function deleteUser(userId: number) {
+  return request(`/users/${userId}/`, { method: 'DELETE' });
 }
 
+// ── Parent ────────────────────────────────────
+export function getParentChildren(parentId: number) {
+  return request(`/parent/${parentId}/children/`);
+}
+
+export function addChild(parentId: number, data: {
+  name: string; pin_code: string; age?: number; therapist_id?: number;
+}) {
+  return request(`/parent/${parentId}/children/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form(data),
+  });
+}
+
+// ── Therapist ─────────────────────────────────
+export function getTherapistPatients(therapistId: number) {
+  return request(`/therapist/${therapistId}/patients/`);
+}
+
+// ── Stats / Attempts ──────────────────────────
 export function getUserStats(userId: number) {
   return request(`/users/${userId}/stats/`);
 }
@@ -98,26 +175,15 @@ export function getProblemSounds(userId: number) {
   return request(`/users/${userId}/problem-sounds/`);
 }
 
-export function getTherapistPatients(therapistId: number) {
-  return request(`/therapist/${therapistId}/patients/`);
-}
-
-// Audio
+// ── Audio ─────────────────────────────────────
 export function analyzeAudio(file: Blob, targetWord: string, userId?: number) {
-  const formData = new FormData();
-  formData.append('file', file, 'recording.webm');
-  formData.append('target_word', targetWord);
-  if (userId) {
-    formData.append('user_id', String(userId));
-  }
-
-  return request('/analyze-audio/', {
-    method: 'POST',
-    body: formData,
-  });
+  const fd = new FormData();
+  fd.append('file', file, 'recording.webm');
+  fd.append('target_word', targetWord);
+  if (userId) fd.append('user_id', String(userId));
+  return request('/analyze-audio/', { method: 'POST', body: fd });
 }
 
-// Server health
 export function getHealth() {
   return request('/');
 }

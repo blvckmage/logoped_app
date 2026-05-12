@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Nunito+Sans:wght@400;600;700&display=swap');
+
+/* ── DESIGN TOKENS ─────────────────────────────── */
+:root {
+  /* Playful palette */
+  --coral:    #FF6B6B;
+  --coral-d:  #e85555;
+  --coral-l:  #FFD5D5;
+  --sky:      #4FC3F7;
+  --sky-d:    #29B6F6;
+  --sky-l:    #E1F5FE;
+  --mint:     #A8E6CF;
+  --mint-d:   #69D2A0;
+  --mint-l:   #E8F8F0;
+  --yellow:   #FFE066;
+  --yellow-d: #F9C922;
+  --yellow-l: #FFF9DB;
+  --purple:   #C3A8E6;
+  --purple-d: #9C6FD6;
+  --purple-l: #F2ECFC;
+  --orange:   #FFB347;
+  --orange-l: #FFF0D9;
+  --green:    #56C596;
+  --red:      #FF5252;
+
+  /* Semantic aliases */
+  --primary:        var(--coral);
+  --primary-dark:   var(--coral-d);
+  --primary-light:  var(--coral-l);
+  --primary-glow:   rgba(255,107,107,0.25);
+  --secondary:      var(--sky);
+  --secondary-dark: var(--sky-d);
+  --secondary-light:var(--sky-l);
+  --accent:         var(--yellow);
+  --purple-light:   var(--purple-l);
+
+  /* Backgrounds */
+  --bg-base:      #FFF8F2;
+  --bg-primary:   #FFF8F2;
+  --bg-secondary: #FFFFFF;
+  --bg-navbar:    rgba(255,255,255,0.92);
+  --bg-sidebar:   #FFFFFF;
+  --bg-card:      #FFFFFF;
+  --bg-card-hover:#FFF5F5;
+  --bg-surface:   rgba(255,255,255,0.85);
+  --bg-hover:     rgba(255,107,107,0.05);
+  --bg-active:    rgba(255,107,107,0.08);
+
+  /* Glass (light) */
+  --glass-border:  rgba(0,0,0,0.07);
+  --glass-border-h:rgba(255,107,107,0.25);
+
+  /* Text */
+  --text-primary:   #2D2D2D;
+  --text-secondary: #6B7280;
+  --text-muted:     #9CA3AF;
+  --text-light:     #FFFFFF;
+  --text-sidebar:   #4B5563;
+
+  /* Borders */
+  --border:       rgba(0,0,0,0.07);
+  --border-light: rgba(0,0,0,0.04);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 6px 20px rgba(0,0,0,0.08);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+  --shadow-xl: 0 20px 60px rgba(0,0,0,0.12);
+  --shadow-glow-primary:  0 4px 20px rgba(255,107,107,0.25);
+  --shadow-glow-secondary:0 4px 20px rgba(79,195,247,0.25);
+
+  /* Radii — rounder for kids */
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+
+  /* Layout */
+  --navbar-height: 64px;
+
+  /* Transitions */
+  --transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+  --transition-bounce: all 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+}
+
+/* ── RESET ─────────────────────────────────────── */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  background-image:
+    radial-gradient(ellipse 70% 60% at 5%  10%, rgba(255,224,102,0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 95%  5%, rgba(255,107,107,0.10) 0%, transparent 50%),
+    radial-gradient(ellipse 55% 50% at 50% 95%, rgba(168,230,207,0.18) 0%, transparent 55%);
+  background-attachment: fixed;
+}
+
+#root { width:100%; min-height:100vh; overflow-x:hidden; max-width:100vw; }
+
+/* ── TYPOGRAPHY ────────────────────────────────── */
+h1,h2,h3,h4,h5,h6 { font-weight: 800; line-height: 1.2; }
+a { color: var(--sky-d); text-decoration: none; }
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--coral) 0%, var(--orange) 50%, var(--yellow-d) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,107,107,0.4); }
+
+::selection { background: rgba(255,107,107,0.2); color: var(--coral-d); }
+:focus-visible { outline: 3px solid var(--coral); outline-offset: 2px; }

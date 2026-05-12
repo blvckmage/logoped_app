@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, Clock, CheckCircle, AlertTriangle, 
+import {
+  ArrowLeft, Clock, CheckCircle, AlertTriangle,
   BarChart3, User, Activity, TrendingUp, Calendar
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -12,43 +12,103 @@ import '../index.css';
 
 interface ChildInfo { id: number; name: string; age: number | null; }
 interface SoundProgress { sound: string; accuracy: number; attempts_count: number; }
+interface TrendPoint { day: string; avg_accuracy: number; attempts: number; }
 interface Stats {
   total_attempts: number; avg_accuracy: number; total_duration_ms: number;
-  total_minutes: number; sound_progress: SoundProgress[]; recent_attempts: any[]; problem_sounds: string[];
+  total_minutes: number; sound_progress: SoundProgress[]; recent_attempts: any[];
+  problem_sounds: string[]; attempt_trend: TrendPoint[];
+  accuracy_breakdown: { excellent: number; good: number; needs_practice: number };
+}
+
+// ── Mini SVG sparkline ──────────────────────────────────────────────────────
+function Sparkline({ data }: { data: TrendPoint[] }) {
+  const { t } = useLanguage();
+  if (!data || data.length < 2) {
+    return <p className="chart-empty">{t('patient.trend_empty')}</p>;
+  }
+  const W = 540; const H = 140;
+  const PAD = { top: 16, right: 16, bottom: 32, left: 36 };
+  const iW = W - PAD.left - PAD.right;
+  const iH = H - PAD.top - PAD.bottom;
+  const xStep = iW / (data.length - 1);
+  const toX = (i: number) => PAD.left + i * xStep;
+  const toY = (v: number) => PAD.top + iH - (v / 100) * iH;
+  const pts = data.map((d, i) => `${toX(i)},${toY(d.avg_accuracy)}`).join(' ');
+  const area = [
+    `M${toX(0)},${toY(data[0].avg_accuracy)}`,
+    ...data.map((d, i) => `L${toX(i)},${toY(d.avg_accuracy)}`),
+    `L${toX(data.length - 1)},${PAD.top + iH}`,
+    `L${toX(0)},${PAD.top + iH}`,
+    'Z',
+  ].join(' ');
+  const fmt = (day: string) => { const d = new Date(day); return `${d.getDate()}.${(d.getMonth()+1).toString().padStart(2,'0')}`; };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="trend-chart-svg">
+      {[0, 50, 100].map(v => (
+        <g key={v}>
+          <line x1={PAD.left} y1={toY(v)} x2={PAD.left+iW} y2={toY(v)} stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
+          <text x={PAD.left-6} y={toY(v)+4} textAnchor="end" fontSize="10" fill="rgba(255,255,255,0.35)">{v}</text>
+        </g>
+      ))}
+      <path d={area} fill="url(#spkGrad)" opacity="0.25" />
+      <polyline points={pts} fill="none" stroke="#4ECDC4" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={toX(i)} cy={toY(d.avg_accuracy)} r="4" fill="#4ECDC4" stroke="#fff" strokeWidth="1.5" />
+          <text x={toX(i)} y={toY(d.avg_accuracy)-9} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.7)">{Math.round(d.avg_accuracy)}%</text>
+          <text x={toX(i)} y={H-6} textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">{fmt(d.day)}</text>
+        </g>
+      ))}
+      <defs>
+        <linearGradient id="spkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#4ECDC4" />
+          <stop offset="100%" stopColor="#4ECDC4" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
 }
 
 function ParentDashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const { t, lang } = useLanguage();
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [showPinModal, setShowPinModal] = useState(!user || user.role !== 'parent');
-  const [parentUser, setParentUser] = useState<any>(user?.role === 'parent' ? user : null);
   const [children, setChildren] = useState<ChildInfo[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [childStats, setChildStats] = useState<Stats | null>(null);
   const [childAttempts, setChildAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingAuth, setLoadingAuth] = useState(false);
   const [error, setError] = useState('');
 
+  // Use AuthContext login — no duplicate auth logic
   const handlePinSubmit = async () => {
     if (pinInput.length < 4) { setPinError(t('auth.pin.required')); return; }
-    setError(''); setLoading(true);
+    setPinError('');
+    setLoadingAuth(true);
     try {
-      const res = await fetch(`/auth/pin/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `pin_code=${encodeURIComponent(pinInput)}`,
-      });
-      if (!res.ok) { setPinError(t('auth.pin.error')); setLoading(false); return; }
-      const data = await res.json();
-      setParentUser(data.user); setShowPinModal(false);
-    } catch { setPinError(t('auth.pin.server_error')); setLoading(false); }
+      const loggedUser = await login(pinInput);
+      if (loggedUser.role !== 'parent') {
+        setPinError(t('auth.pin.error'));
+        return;
+      }
+      setShowPinModal(false);
+    } catch {
+      setPinError(t('auth.pin.error'));
+    }
+    setLoadingAuth(false);
   };
+
+  const parentUser = user?.role === 'parent' ? user : null;
 
   useEffect(() => {
     if (!parentUser) return;
-    const fetchChildren = async () => {
+    setShowPinModal(false);
+    (async () => {
       setLoading(true);
       try {
         const usersData = await getUsers('child');
@@ -58,23 +118,23 @@ function ParentDashboard() {
         else setError(t('parent.no_children'));
       } catch { setError(t('parent.load_error')); }
       setLoading(false);
-    };
-    fetchChildren();
-  }, [parentUser]);
+    })();
+  }, [parentUser?.id]);
 
   useEffect(() => {
     if (!selectedChildId) return;
-    const fetchStats = async () => {
+    (async () => {
       setLoading(true);
       try {
-        const statsData = await getUserStats(selectedChildId);
+        const [statsData, attemptsData] = await Promise.all([
+          getUserStats(selectedChildId),
+          getUserAttempts(selectedChildId, 20),
+        ]);
         setChildStats(statsData.stats);
-        const attemptsData = await getUserAttempts(selectedChildId, 20);
         setChildAttempts(attemptsData.attempts);
       } catch { setError(t('parent.stats_error')); }
       setLoading(false);
-    };
-    fetchStats();
+    })();
   }, [selectedChildId]);
 
   const selectedChild = children.find(c => c.id === selectedChildId);
@@ -90,12 +150,24 @@ function ParentDashboard() {
             <p>{t('auth.parent.subtitle')}</p>
           </div>
           <div className="auth-form">
-            <input type="password" className="pin-input-lg" maxLength={4} value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-              onKeyDown={(e) => { if (e.key === 'Enter') handlePinSubmit(); }}
-              placeholder={t('auth.pin.placeholder')} autoFocus />
-            <button className="btn btn-primary btn-block" onClick={handlePinSubmit} disabled={loading}>
-              {loading ? t('app.loading') : t('auth.pin.button')}
+            <input
+              id="parent-pin-input"
+              type="password"
+              className="pin-input-lg"
+              maxLength={4}
+              value={pinInput}
+              onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') handlePinSubmit(); }}
+              placeholder={t('auth.pin.placeholder')}
+              autoFocus
+            />
+            <button
+              id="parent-pin-submit"
+              className="btn btn-primary btn-block"
+              onClick={handlePinSubmit}
+              disabled={loadingAuth}
+            >
+              {loadingAuth ? t('app.loading') : t('auth.pin.button')}
             </button>
             {pinError && <p className="auth-error">{pinError}</p>}
             <p className="auth-hint">{t('auth.pin.hint')}1111</p>
@@ -111,7 +183,7 @@ function ParentDashboard() {
     <div className="dashboard-page">
       <div className="page-header">
         <div className="page-header-left">
-          <button className="btn btn-ghost" onClick={() => navigate('/')} aria-label={t('app.toMain')} title={t('app.toMain')}>
+          <button className="btn btn-ghost" onClick={() => navigate('/')} aria-label={t('app.toMain')}>
             <ArrowLeft size={20} />
           </button>
         </div>
@@ -145,6 +217,7 @@ function ParentDashboard() {
             <div><h2>{selectedChild.name}</h2>{selectedChild.age && <p className="child-age-text">{selectedChild.age} {t('parent.years')}</p>}</div>
           </div>
 
+          {/* Summary stats */}
           <div className="stats-grid-modern">
             <div className="stat-card-modern">
               <div className="stat-icon-wrapper" style={{ backgroundColor: 'rgba(78,205,196,0.15)' }}><Clock size={24} color="#4ECDC4" /></div>
@@ -160,12 +233,24 @@ function ParentDashboard() {
             </div>
             <div className="stat-card-modern">
               <div className="stat-icon-wrapper" style={{ backgroundColor: 'rgba(255,107,107,0.15)' }}><AlertTriangle size={24} color="#FF6B6B" /></div>
-              <div className="stat-content"><span className="stat-label">{t('parent.stat.problem_sounds')}</span>
+              <div className="stat-content">
+                <span className="stat-label">{t('parent.stat.problem_sounds')}</span>
                 <span className="stat-value">{childStats.problem_sounds?.length > 0 ? childStats.problem_sounds.join(', ') : t('parent.stat.none')}</span>
               </div>
             </div>
           </div>
 
+          {/* Trend chart */}
+          {childStats.attempt_trend && childStats.attempt_trend.length >= 2 && (
+            <section className="dashboard-section">
+              <h3 className="section-title-with-icon"><TrendingUp size={20} /> {t('patient.trend')}</h3>
+              <div className="chart-card">
+                <Sparkline data={childStats.attempt_trend} />
+              </div>
+            </section>
+          )}
+
+          {/* Sound progress */}
           {childStats.sound_progress?.length > 0 && (
             <section className="dashboard-section">
               <h3 className="section-title-with-icon"><Activity size={20} /> {t('parent.sound_progress')}</h3>
@@ -189,6 +274,7 @@ function ParentDashboard() {
             </section>
           )}
 
+          {/* Recent attempts */}
           <section className="dashboard-section">
             <h3 className="section-title-with-icon"><Calendar size={20} /> {t('parent.recent_attempts')}</h3>
             <div className="attempts-list">

@@ -31,18 +31,6 @@ TOKEN_EXPIRE_SECONDS = int(os.getenv('TOKEN_EXPIRE_SECONDS', '86400'))
 # ── Role hierarchy ─────────────────────────────
 ROLE_LEVELS = {'superadmin': 4, 'admin': 3, 'therapist': 2, 'parent': 1, 'child': 0}
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://logoped-app-front.onrender.com",  # домен фронтенда
-        "http://localhost:5173",
-        "http://localhost:3000"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 def can_manage(actor_role: str, target_role: str) -> bool:
     """Actor can create/delete users with lower or equal level (except own superadmin)."""
     return ROLE_LEVELS.get(actor_role, -1) > ROLE_LEVELS.get(target_role, 99)
@@ -95,8 +83,15 @@ def require_roles(*roles: str):
 app = FastAPI(title="Kazakh Speech Therapy API", version="2.0.0")
 
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=[
+        "https://logoped-app-front.onrender.com",  # домен фронтенда
+        "http://localhost:5173",
+        "http://localhost:3000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 os.makedirs("uploads", exist_ok=True)

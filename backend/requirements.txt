@@ -8,3 +8,4 @@ torch
 torchvision
 torchaudio
 transformers==4.47.1
+audioop-lts

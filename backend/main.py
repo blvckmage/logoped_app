@@ -18,13 +18,14 @@ from transformers import pipeline
 
 from phoneme_analyzer import analyze_pronunciation
 from database import (
-    create_user, get_user, get_user_by_email, get_user_by_pin,
+    create_user, get_user, get_user_by_email, get_user_by_phone, get_user_by_pin,
     get_all_users, get_children_of_parent, update_user, delete_user,
     create_attempt, get_user_attempts, get_user_stats,
     get_therapist_patients, get_problem_sounds, get_global_stats,
     hash_password, hash_pin,
     create_plan, get_plan, get_plans_for_child, get_active_plan,
     get_plans_by_therapist, update_plan_status, delete_plan,
+    get_child_gamification, get_user_achievements, ACHIEVEMENTS_DEF,
 )
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'change_this_secret_in_prod')
@@ -115,23 +116,26 @@ def seed_demo_data():
     print("🌱 Создание демо-данных...")
 
     superadmin = create_user(name="Суперадмин", role="superadmin",
-                             email="superadmin@logoped.kz", password="admin123")
+                             phone="+77000000001", email="superadmin@logoped.kz", password="admin123")
     admin = create_user(name="Админ Асель", role="admin",
-                        email="admin@logoped.kz", password="admin123",
+                        phone="+77000000002", email="admin@logoped.kz", password="admin123",
                         created_by=superadmin["id"])
     therapist = create_user(name="Логопед Айгуль", role="therapist",
-                            email="aigul@logoped.kz", password="therapist123",
+                            phone="+77000000003", email="aigul@logoped.kz", password="therapist123",
                             created_by=admin["id"])
     parent = create_user(name="Родитель Анар", role="parent",
-                         email="anar@example.kz", password="parent123",
-                         pin_code="1111", created_by=admin["id"])
-    amina = create_user(name="Амина", role="child", pin_code="1234",
+                         phone="+77000000004", email="anar@example.kz", password="parent123",
+                         created_by=admin["id"])
+    amina = create_user(name="Амина", role="child",
+                        phone="+77000000005", password="child123",
                         parent_id=parent["id"], therapist_id=therapist["id"],
                         age=5, created_by=parent["id"])
-    timur = create_user(name="Тимур", role="child", pin_code="5678",
+    timur = create_user(name="Тимур", role="child",
+                        phone="+77000000006", password="child456",
                         parent_id=parent["id"], therapist_id=therapist["id"],
                         age=6, created_by=parent["id"])
-    create_user(name="Айша", role="child", pin_code="9012",
+    create_user(name="Айша", role="child",
+                phone="+77000000007", password="child789",
                 therapist_id=therapist["id"], age=4, created_by=therapist["id"])
 
     # Demo attempts
@@ -144,7 +148,7 @@ def seed_demo_data():
     ]:
         create_attempt(amina["id"], word, trans, errors, acc, dur)
 
-    print(f"✅ Демо-данные созданы. Superadmin: superadmin@logoped.kz / admin123")
+    print(f"✅ Демо-данные созданы. Superadmin: +77000000001 / admin123")
 
 
 seed_demo_data()
@@ -165,9 +169,10 @@ def read_root():
 #  AUTH
 # ──────────────────────────────────────────────
 @app.post("/auth/login/")
-def api_login(email: str = Form(...), password: str = Form(...)):
-    """Email + password login for admin/therapist/parent accounts."""
-    user = get_user_by_email(email)
+def api_login(login: str = Form(...), password: str = Form(...)):
+    """Phone or email + password login for all roles."""
+    # Try phone first, then email
+    user = get_user_by_phone(login) or get_user_by_email(login)
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     if user.get("password_hash") != hash_password(password):
@@ -175,8 +180,7 @@ def api_login(email: str = Form(...), password: str = Form(...)):
     if not user.get("is_active", 1):
         raise HTTPException(403, "Аккаунт деактивирован")
     token = create_token(user["id"])
-    # Remove sensitive field before returning
-    safe_user = {k: v for k, v in user.items() if k != "password_hash"}
+    safe_user = {k: v for k, v in user.items() if k not in ("password_hash", "pin_hash", "pin_code")}
     return {"status": "success", "user": safe_user, "access_token": token, "token_type": "bearer"}
 
 
@@ -237,9 +241,9 @@ def api_list_users(
 def api_create_user(
     name: str = Form(...),
     role: str = Form(...),
+    phone: str = Form(None),
     email: str = Form(None),
     password: str = Form(None),
-    pin_code: str = Form(None),
     parent_id: int = Form(None),
     therapist_id: int = Form(None),
     age: int = Form(None),
@@ -250,21 +254,19 @@ def api_create_user(
     if not can_manage(actor_role, role):
         raise HTTPException(403, f"Роль '{actor_role}' не может создавать '{role}'")
 
-    if role in ("admin", "therapist", "parent") and not email:
-        raise HTTPException(400, "Email обязателен для этой роли")
-    if role in ("admin", "therapist", "parent") and not password:
-        raise HTTPException(400, "Пароль обязателен для этой роли")
-    if role == "child" and not pin_code:
-        raise HTTPException(400, "PIN-код обязателен для ребёнка")
+    if not phone and not email:
+        raise HTTPException(400, "Номер телефона или email обязателен")
+    if not password:
+        raise HTTPException(400, "Пароль обязателен")
 
-    if email:
-        existing = get_user_by_email(email)
-        if existing:
-            raise HTTPException(400, "Email уже занят")
+    if phone and get_user_by_phone(phone):
+        raise HTTPException(400, "Номер телефона уже занят")
+    if email and get_user_by_email(email):
+        raise HTTPException(400, "Email уже занят")
 
     user = create_user(
-        name=name, role=role, email=email, password=password,
-        pin_code=pin_code, parent_id=parent_id, therapist_id=therapist_id,
+        name=name, role=role, phone=phone, email=email, password=password,
+        parent_id=parent_id, therapist_id=therapist_id,
         created_by=current_user["id"], age=age,
     )
     return {"status": "success", "user": user}
@@ -365,7 +367,8 @@ def api_parent_children(parent_id: int, current_user: dict = Depends(get_current
 def api_add_child(
     parent_id: int,
     name: str = Form(...),
-    pin_code: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
     age: int = Form(None),
     therapist_id: int = Form(None),
     current_user: dict = Depends(get_current_user),
@@ -376,10 +379,12 @@ def api_add_child(
     parent = get_user(parent_id)
     if not parent or parent["role"] != "parent":
         raise HTTPException(404, "Родитель не найден")
-    if len(pin_code) < 4:
-        raise HTTPException(400, "PIN должен содержать минимум 4 цифры")
+    if len(password) < 4:
+        raise HTTPException(400, "Пароль должен содержать минимум 4 символа")
+    if get_user_by_phone(phone):
+        raise HTTPException(400, "Номер телефона уже занят")
     child = create_user(
-        name=name, role="child", pin_code=pin_code,
+        name=name, role="child", phone=phone, password=password,
         parent_id=parent_id, therapist_id=therapist_id,
         created_by=current_user["id"], age=age,
     )
@@ -407,6 +412,7 @@ async def analyze_audio(
     file: UploadFile = File(...),
     target_word: str = Form("рама"),
     user_id: int = Form(None),
+    sound: str = Form(None),
 ):
     file_ext = file.filename.split('.')[-1] if file.filename and '.' in file.filename else "webm"
     rid = uuid.uuid4().hex
@@ -440,6 +446,7 @@ async def analyze_audio(
                 user_id=user_id, target_word=target_word,
                 transcription=transcription, detected_errors=detected_errors,
                 accuracy=accuracy, duration_ms=int(duration_ms), audio_path=wav,
+                sound=sound,
             )
 
         severity = phoneme_analysis.get('overall_severity', 'none')
@@ -463,6 +470,7 @@ async def analyze_audio(
         }
         if attempt_record:
             resp["attempt_id"] = attempt_record["id"]
+            resp["gamification"] = attempt_record.get("gamification", {})
         return resp
 
     except Exception as e:
@@ -565,6 +573,34 @@ def api_therapist_plans(therapist_id: int, current_user: dict = Depends(get_curr
     if current_user['role'] not in ('superadmin', 'admin') and current_user['id'] != therapist_id:
         raise HTTPException(403, "Нет доступа")
     return {"plans": get_plans_by_therapist(therapist_id)}
+
+
+# ──────────────────────────────────────────────
+#  GAMIFICATION
+# ──────────────────────────────────────────────
+
+@app.get("/children/{child_id}/gamification/")
+def api_child_gamification(child_id: int, current_user: dict = Depends(get_current_user)):
+    actor = current_user
+    if actor['role'] not in ('superadmin', 'admin', 'therapist') and actor['id'] != child_id:
+        child = get_user(child_id)
+        if not child or child.get('parent_id') != actor['id']:
+            raise HTTPException(403, "Нет доступа")
+    data = get_child_gamification(child_id)
+    if not data:
+        raise HTTPException(404, "Пользователь не найден")
+    return {"status": "success", **data}
+
+
+@app.get("/children/{child_id}/achievements/")
+def api_child_achievements(child_id: int, current_user: dict = Depends(get_current_user)):
+    actor = current_user
+    if actor['role'] not in ('superadmin', 'admin', 'therapist') and actor['id'] != child_id:
+        child = get_user(child_id)
+        if not child or child.get('parent_id') != actor['id']:
+            raise HTTPException(403, "Нет доступа")
+    achievements = get_user_achievements(child_id)
+    return {"status": "success", "achievements": achievements}
 
 
 if __name__ == "__main__":

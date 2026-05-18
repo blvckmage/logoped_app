@@ -85,6 +85,33 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_users_role       ON users(role);
         CREATE INDEX IF NOT EXISTS idx_users_parent     ON users(parent_id);
         CREATE INDEX IF NOT EXISTS idx_users_therapist  ON users(therapist_id);
+
+        CREATE TABLE IF NOT EXISTS treatment_plans (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            child_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            therapist_id INTEGER NOT NULL REFERENCES users(id),
+            title        TEXT    NOT NULL DEFAULT 'Индивидуальный план',
+            description  TEXT    NOT NULL DEFAULT '',
+            status       TEXT    NOT NULL DEFAULT 'active'
+                             CHECK(status IN ('active','paused','completed')),
+            created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS plan_exercises (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id         INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+            sound           TEXT    NOT NULL,
+            sound_letter    TEXT    NOT NULL,
+            words           TEXT    NOT NULL DEFAULT '[]',
+            target_accuracy REAL    NOT NULL DEFAULT 80.0,
+            order_index     INTEGER NOT NULL DEFAULT 0,
+            sessions_target INTEGER NOT NULL DEFAULT 5
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_plans_child     ON treatment_plans(child_id);
+        CREATE INDEX IF NOT EXISTS idx_plans_therapist ON treatment_plans(therapist_id);
+        CREATE INDEX IF NOT EXISTS idx_exercises_plan  ON plan_exercises(plan_id);
     """)
 
     # Migrations for existing DBs
@@ -353,6 +380,114 @@ def get_global_stats() -> dict:
     ).fetchone()
     conn.close()
     return dict(row)
+
+
+# ─── Treatment Plan CRUD ──────────────────────────────────────────────────────
+
+def _plan_with_exercises(conn, plan_row) -> dict:
+    plan = dict(plan_row)
+    exs = conn.execute(
+        "SELECT * FROM plan_exercises WHERE plan_id = ? ORDER BY order_index", (plan['id'],)
+    ).fetchall()
+    plan['exercises'] = [dict(e) for e in exs]
+    return plan
+
+
+def create_plan(child_id: int, therapist_id: int, title: str, description: str,
+                exercises: list[dict]) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO treatment_plans (child_id, therapist_id, title, description) VALUES (?,?,?,?)",
+        (child_id, therapist_id, title, description)
+    )
+    plan_id = cursor.lastrowid
+    for i, ex in enumerate(exercises):
+        import json as _json
+        cursor.execute(
+            """INSERT INTO plan_exercises
+               (plan_id, sound, sound_letter, words, target_accuracy, order_index, sessions_target)
+               VALUES (?,?,?,?,?,?,?)""",
+            (plan_id, ex['sound'], ex['sound_letter'],
+             _json.dumps(ex.get('words', [])),
+             ex.get('target_accuracy', 80.0), i,
+             ex.get('sessions_target', 5))
+        )
+    conn.commit()
+    row = conn.execute("SELECT * FROM treatment_plans WHERE id = ?", (plan_id,)).fetchone()
+    result = _plan_with_exercises(conn, row)
+    conn.close()
+    return result
+
+
+def get_plans_for_child(child_id: int) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM treatment_plans WHERE child_id = ? ORDER BY created_at DESC", (child_id,)
+    ).fetchall()
+    result = [_plan_with_exercises(conn, r) for r in rows]
+    conn.close()
+    return result
+
+
+def get_active_plan(child_id: int) -> dict | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM treatment_plans WHERE child_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+        (child_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    result = _plan_with_exercises(conn, row)
+    conn.close()
+    return result
+
+
+def get_plans_by_therapist(therapist_id: int) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT tp.*, u.name AS child_name, u.age AS child_age
+           FROM treatment_plans tp
+           JOIN users u ON u.id = tp.child_id
+           WHERE tp.therapist_id = ?
+           ORDER BY tp.created_at DESC""", (therapist_id,)
+    ).fetchall()
+    result = [_plan_with_exercises(conn, r) for r in rows]
+    conn.close()
+    return result
+
+
+def get_plan(plan_id: int) -> dict | None:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM treatment_plans WHERE id = ?", (plan_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None
+    result = _plan_with_exercises(conn, row)
+    conn.close()
+    return result
+
+
+def update_plan_status(plan_id: int, status: str) -> dict | None:
+    conn = get_connection()
+    conn.execute(
+        "UPDATE treatment_plans SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        (status, plan_id)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM treatment_plans WHERE id = ?", (plan_id,)).fetchone()
+    result = _plan_with_exercises(conn, row) if row else None
+    conn.close()
+    return result
+
+
+def delete_plan(plan_id: int) -> bool:
+    conn = get_connection()
+    result = conn.execute("DELETE FROM treatment_plans WHERE id = ?", (plan_id,))
+    conn.commit()
+    conn.close()
+    return result.rowcount > 0
 
 
 # Auto-init

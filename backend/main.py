@@ -23,6 +23,8 @@ from database import (
     create_attempt, get_user_attempts, get_user_stats,
     get_therapist_patients, get_problem_sounds, get_global_stats,
     hash_password, hash_pin,
+    create_plan, get_plan, get_plans_for_child, get_active_plan,
+    get_plans_by_therapist, update_plan_status, delete_plan,
 )
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'change_this_secret_in_prod')
@@ -427,10 +429,9 @@ async def analyze_audio(
 
         processing_ms = round((time.time() - t0) * 1000)
 
-        # Phoneme-level analysis replaces old character-matching heuristics
-        analysis = analyze_pronunciation(transcription, target_word)
-        accuracy         = analysis['accuracy']
-        detected_errors  = analysis['detected_errors']
+        analysis        = analyze_pronunciation(transcription, target_word)
+        accuracy        = analysis['accuracy']
+        detected_errors = analysis['detected_errors']
         phoneme_analysis = analysis['phoneme_analysis']
 
         attempt_record = None
@@ -450,19 +451,13 @@ async def analyze_audio(
             msg = "Слово произнесено с искажениями."
         else:
             msg = "Попробуй ещё раз, произнеси слово чётче."
-
-        primary_disorder = (phoneme_analysis['disorders_found'][0]['disorder']
-                            if phoneme_analysis['disorders_found'] else None)
-        if primary_disorder:
-            msg += f" Выявлено: {primary_disorder}."
+        if phoneme_analysis['disorders_found']:
+            msg += f" Выявлено: {phoneme_analysis['disorders_found'][0]['disorder']}."
 
         resp = {
-            "status": "success",
-            "message": msg,
-            "transcription": transcription,
-            "target_word": target_word,
-            "accuracy": accuracy,
-            "detected_errors": detected_errors,
+            "status": "success", "message": msg,
+            "transcription": transcription, "target_word": target_word,
+            "accuracy": accuracy, "detected_errors": detected_errors,
             "phoneme_analysis": phoneme_analysis,
             "processing_time_ms": processing_ms,
         }
@@ -478,6 +473,98 @@ async def analyze_audio(
                 if os.path.exists(p): os.remove(p)
             except OSError:
                 pass
+
+
+# ──────────────────────────────────────────────
+#  TREATMENT PLANS
+# ──────────────────────────────────────────────
+
+@app.get("/children/{child_id}/plan/")
+def api_get_active_plan(child_id: int, current_user: dict = Depends(get_current_user)):
+    actor = current_user
+    if actor['role'] not in ('superadmin', 'admin', 'therapist') and actor['id'] != child_id:
+        child = get_user(child_id)
+        if not child or child.get('parent_id') != actor['id']:
+            raise HTTPException(403, "Нет доступа")
+    plan = get_active_plan(child_id)
+    return {"plan": plan}
+
+
+@app.get("/children/{child_id}/plans/")
+def api_get_child_plans(child_id: int, current_user: dict = Depends(get_current_user)):
+    actor = current_user
+    if actor['role'] not in ('superadmin', 'admin', 'therapist') and actor['id'] != child_id:
+        child = get_user(child_id)
+        if not child or child.get('parent_id') != actor['id']:
+            raise HTTPException(403, "Нет доступа")
+    return {"plans": get_plans_for_child(child_id)}
+
+
+@app.post("/plans/")
+def api_create_plan(
+    child_id: int = Form(...),
+    title: str = Form("Индивидуальный план"),
+    description: str = Form(""),
+    exercises: str = Form(...),   # JSON string: [{sound, sound_letter, words, target_accuracy, sessions_target}]
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user['role'] not in ('superadmin', 'admin', 'therapist'):
+        raise HTTPException(403, "Только логопед может создавать планы")
+    child = get_user(child_id)
+    if not child or child['role'] != 'child':
+        raise HTTPException(404, "Ребёнок не найден")
+    try:
+        exs = json.loads(exercises)
+    except Exception:
+        raise HTTPException(400, "Неверный формат exercises (ожидается JSON)")
+    plan = create_plan(
+        child_id=child_id,
+        therapist_id=current_user['id'],
+        title=title,
+        description=description,
+        exercises=exs,
+    )
+    return {"status": "success", "plan": plan}
+
+
+@app.get("/plans/{plan_id}/")
+def api_get_plan(plan_id: int, current_user: dict = Depends(get_current_user)):
+    plan = get_plan(plan_id)
+    if not plan:
+        raise HTTPException(404, "План не найден")
+    return {"plan": plan}
+
+
+@app.patch("/plans/{plan_id}/status/")
+def api_update_plan_status(
+    plan_id: int,
+    status: str = Form(...),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user['role'] not in ('superadmin', 'admin', 'therapist'):
+        raise HTTPException(403, "Нет прав")
+    if status not in ('active', 'paused', 'completed'):
+        raise HTTPException(400, "Неверный статус")
+    plan = update_plan_status(plan_id, status)
+    if not plan:
+        raise HTTPException(404, "План не найден")
+    return {"status": "success", "plan": plan}
+
+
+@app.delete("/plans/{plan_id}/")
+def api_delete_plan(plan_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user['role'] not in ('superadmin', 'admin', 'therapist'):
+        raise HTTPException(403, "Нет прав")
+    if not delete_plan(plan_id):
+        raise HTTPException(404, "План не найден")
+    return {"status": "success"}
+
+
+@app.get("/therapist/{therapist_id}/plans/")
+def api_therapist_plans(therapist_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user['role'] not in ('superadmin', 'admin') and current_user['id'] != therapist_id:
+        raise HTTPException(403, "Нет доступа")
+    return {"plans": get_plans_by_therapist(therapist_id)}
 
 
 if __name__ == "__main__":

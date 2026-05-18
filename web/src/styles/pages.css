@@ -194,6 +194,66 @@
 .result-meta-item { font-size: .82rem; color: var(--text-muted); font-weight: 600; }
 .try-again-btn { display: flex; align-items: center; gap: .5rem; margin: 0 1.5rem 1.5rem; }
 
+/* ── PHONEME COMPARISON ──────────────────────── */
+.phoneme-comparison {
+  display: flex; flex-direction: column; gap: .5rem;
+  background: rgba(255,255,255,.04); border-radius: 12px;
+  padding: .85rem 1rem; border: 1px solid rgba(255,255,255,.08);
+}
+.phoneme-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.phoneme-row-label {
+  font-size: .68rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--text-muted); min-width: 48px;
+}
+.phoneme-chips { display: flex; gap: .3rem; flex-wrap: wrap; }
+.phoneme-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 2rem; height: 2rem; padding: 0 .4rem;
+  border-radius: 8px; font-size: .8rem; font-weight: 800;
+  font-family: 'Courier New', monospace;
+  border: 1.5px solid transparent; transition: transform .15s;
+}
+.phoneme-chip.phoneme-ok   { background: rgba(46,213,115,.15); border-color: rgba(46,213,115,.4); color: #2ed573; }
+.phoneme-chip.phoneme-error{ background: rgba(255,71,87,.15);  border-color: rgba(255,71,87,.4);  color: #ff4757; }
+
+/* ── DISORDERS ───────────────────────────────── */
+.disorders-section { display: flex; flex-direction: column; gap: .5rem; }
+.disorder-card {
+  border-radius: 12px; padding: .75rem 1rem;
+  border-left: 3px solid transparent;
+}
+.disorder-card.disorder-mild     { background: rgba(255,165,2,.08); border-color: #ffa502; }
+.disorder-card.disorder-moderate { background: rgba(255,107,107,.08); border-color: #ff6b6b; }
+.disorder-card.disorder-severe   { background: rgba(255,71,87,.12); border-color: #ff4757; }
+.disorder-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .35rem; }
+.disorder-name { font-size: .9rem; font-weight: 800; color: var(--text-primary); }
+.severity-badge {
+  font-size: .65rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .4px; padding: .2rem .55rem; border-radius: 999px;
+}
+.severity-badge.severity-mild     { background: rgba(255,165,2,.2);  color: #ffa502; }
+.severity-badge.severity-moderate { background: rgba(255,107,107,.2);color: #ff6b6b; }
+.severity-badge.severity-severe   { background: rgba(255,71,87,.2);  color: #ff4757; }
+.disorder-errors {
+  list-style: none; display: flex; flex-direction: column; gap: .2rem;
+  margin: 0; padding: 0;
+}
+.disorder-errors li { font-size: .82rem; color: var(--text-secondary); font-weight: 600; }
+.disorder-errors li::before { content: '→ '; opacity: .5; }
+
+/* ── RECOMMENDATIONS ─────────────────────────── */
+.recommendations-section { display: flex; flex-direction: column; gap: .4rem; }
+.recommendations-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.recommendation-item {
+  display: flex; gap: .5rem; align-items: flex-start;
+  background: rgba(78,205,196,.07); border-radius: 10px;
+  padding: .55rem .75rem; border: 1px solid rgba(78,205,196,.15);
+}
+.rec-bullet { flex-shrink: 0; font-size: .95rem; }
+.recommendation-item span:last-child { font-size: .82rem; color: var(--text-secondary); font-weight: 600; line-height: 1.45; }
+
+.result-message.perfect { color: #2ed573; font-weight: 700; font-size: .95rem; text-align: center; }
+
 /* ── DASHBOARD PAGE ──────────────────────────── */
 .dashboard-page { max-width: 1100px; margin: 0 auto; }
 

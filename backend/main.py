@@ -9,14 +9,14 @@ import hmac
 import hashlib
 import base64
 import uuid
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Body
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydub import AudioSegment
 import torch
 from transformers import pipeline
-from fastapi.middleware.cors import CORSMiddleware
 
+from phoneme_analyzer import analyze_pronunciation
 from database import (
     create_user, get_user, get_user_by_email, get_user_by_pin,
     get_all_users, get_children_of_parent, update_user, delete_user,
@@ -148,53 +148,6 @@ def seed_demo_data():
 seed_demo_data()
 
 
-# ── SOUND ERROR RULES ──────────────────────────
-SOUND_ERROR_RULES: dict[str, list[tuple]] = {
-    "рама":  [(lambda t: "л" in t and "р" not in t, "Замена звука Р на Л (Ротацизм)"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "рак":   [(lambda t: "л" in t and "р" not in t, "Замена звука Р на Л (Ротацизм)"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "рыба":  [(lambda t: "л" in t and "р" not in t, "Замена звука Р на Л (Ротацизм)"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "рука":  [(lambda t: "л" in t and "р" not in t, "Замена звука Р на Л (Ротацизм)"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "лампа": [(lambda t: "р" in t and "л" not in t, "Замена звука Л на Р (Ламбдацизм)"), (lambda t: len(t) < 4, "Слово произнесено неполностью")],
-    "луна":  [(lambda t: "р" in t and "л" not in t, "Замена звука Л на Р (Ламбдацизм)"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "ложка": [(lambda t: "р" in t and "л" not in t, "Замена звука Л на Р (Ламбдацизм)"), (lambda t: len(t) < 4, "Слово произнесено неполностью")],
-    "лиса":  [(lambda t: "р" in t and "л" not in t, "Замена звука Л на Р (Ламбдацизм)"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "қала":  [(lambda t: "к" in t and "қ" not in t, "Звук Қ произнесён как К"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "қар":   [(lambda t: "к" in t and "қ" not in t, "Звук Қ произнесён как К"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "қол":   [(lambda t: "к" in t and "қ" not in t, "Звук Қ произнесён как К"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "қас":   [(lambda t: "к" in t and "қ" not in t, "Звук Қ произнесён как К"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "сыр":   [(lambda t: "ш" in t and "с" not in t, "Замена звука С на Ш"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "сөз":   [(lambda t: "ш" in t and "с" not in t, "Замена звука С на Ш"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "сан":   [(lambda t: "ш" in t and "с" not in t, "Замена звука С на Ш"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "су":    [(lambda t: "ш" in t and "с" not in t, "Замена звука С на Ш"), (lambda t: len(t) < 1, "Слово произнесено неполностью")],
-    "шар":   [(lambda t: "с" in t and "ш" not in t, "Замена звука Ш на С"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "шелек": [(lambda t: "с" in t and "ш" not in t, "Замена звука Ш на С"), (lambda t: len(t) < 4, "Слово произнесено неполностью")],
-    "шаш":   [(lambda t: "с" in t and "ш" not in t, "Замена звука Ш на С"), (lambda t: len(t) < 2, "Слово произнесено неполностью")],
-    "шығу":  [(lambda t: "с" in t and "ш" not in t, "Замена звука Ш на С"), (lambda t: len(t) < 3, "Слово произнесено неполностью")],
-    "чашка": [(lambda t: "с" in t and "ч" not in t, "Замена звука Ч на С"), (lambda t: len(t) < 4, "Слово произнесено неполностью")],
-}
-
-
-def compute_accuracy(transcription: str, target_word: str) -> tuple[float, list[str]]:
-    target_lower = target_word.lower().strip()
-    trans_lower = transcription.lower().strip()
-    if not trans_lower:
-        return 0.0, ["Речь не распознана"]
-    if trans_lower == target_lower:
-        return 100.0, []
-    max_len = max(len(target_lower), len(trans_lower))
-    matching = sum(1 for a, b in zip(target_lower, trans_lower) if a == b)
-    accuracy = round((matching / max_len) * 100, 1) if max_len else 100.0
-    errors = []
-    for check_fn, msg in SOUND_ERROR_RULES.get(target_lower, []):
-        try:
-            if check_fn(trans_lower):
-                errors.append(msg)
-                break
-        except Exception:
-            pass
-    if accuracy >= 50 and not errors:
-        errors.append("Небольшие искажения произношения")
-    return accuracy, errors
 
 
 # ──────────────────────────────────────────────
@@ -473,7 +426,12 @@ async def analyze_audio(
             transcription = result.get('text', '').strip()
 
         processing_ms = round((time.time() - t0) * 1000)
-        accuracy, detected_errors = compute_accuracy(transcription, target_word)
+
+        # Phoneme-level analysis replaces old character-matching heuristics
+        analysis = analyze_pronunciation(transcription, target_word)
+        accuracy         = analysis['accuracy']
+        detected_errors  = analysis['detected_errors']
+        phoneme_analysis = analysis['phoneme_analysis']
 
         attempt_record = None
         if user_id:
@@ -483,21 +441,29 @@ async def analyze_audio(
                 accuracy=accuracy, duration_ms=int(duration_ms), audio_path=wav,
             )
 
+        severity = phoneme_analysis.get('overall_severity', 'none')
         if accuracy >= 90:
-            msg = "Отличное произношение! Ошибок нет."
+            msg = "Отличное произношение!"
         elif accuracy >= 70:
             msg = "Хорошо, но есть небольшие недочёты."
         elif accuracy >= 40:
             msg = "Слово произнесено с искажениями."
         else:
             msg = "Попробуй ещё раз, произнеси слово чётче."
-        if detected_errors:
-            msg += f" Обнаружено: {', '.join(detected_errors)}."
+
+        primary_disorder = (phoneme_analysis['disorders_found'][0]['disorder']
+                            if phoneme_analysis['disorders_found'] else None)
+        if primary_disorder:
+            msg += f" Выявлено: {primary_disorder}."
 
         resp = {
-            "status": "success", "message": msg,
-            "transcription": transcription, "target_word": target_word,
-            "accuracy": accuracy, "detected_errors": detected_errors,
+            "status": "success",
+            "message": msg,
+            "transcription": transcription,
+            "target_word": target_word,
+            "accuracy": accuracy,
+            "detected_errors": detected_errors,
+            "phoneme_analysis": phoneme_analysis,
             "processing_time_ms": processing_ms,
         }
         if attempt_record:

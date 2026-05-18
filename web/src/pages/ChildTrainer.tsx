@@ -23,6 +23,37 @@ const SOUND_TARGETS: SoundTarget[] = [
   { id: 'CH', letter: 'Ч', word: 'Чашка', examples: ['Чашка', 'Чай', 'Чудо', 'Часы'] },
 ];
 
+interface PhonemeError {
+  operation: 'equal' | 'substitute' | 'delete' | 'insert';
+  target_phoneme: string;
+  actual_phoneme: string;
+  target_letter: string;
+  actual_letter: string;
+  disorder: string;
+  description: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  position: 'initial' | 'medial' | 'final';
+}
+
+interface DisorderFound {
+  disorder: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  errors: string[];
+  recommendations: string[];
+}
+
+interface PhonemeAnalysis {
+  target_phonemes: string[];
+  actual_phonemes: string[];
+  phoneme_errors: PhonemeError[];
+  disorders_found: DisorderFound[];
+  overall_severity: 'none' | 'mild' | 'moderate' | 'severe';
+  severity_label: string;
+  severity_detail: string;
+  recommendations: string[];
+  edit_distance: number;
+}
+
 interface AnalysisResult {
   status: string;
   message: string;
@@ -30,6 +61,7 @@ interface AnalysisResult {
   target_word: string;
   accuracy: number;
   detected_errors: string[];
+  phoneme_analysis?: PhonemeAnalysis;
   processing_time_ms: number;
   attempt_id?: number;
 }
@@ -240,6 +272,8 @@ function ChildTrainer() {
         {result && (
           <section className="trainer-section result-section">
             <div className={`result-card-platform ${result.accuracy >= 70 ? 'success' : 'error'}`}>
+
+              {/* ── Accuracy header ─────────────────────────────────────── */}
               <div className="result-header">
                 <div className="result-accuracy-display">
                   <span className="result-accuracy-value" style={{ color: getAccuracyColor(result.accuracy) }}>
@@ -248,32 +282,112 @@ function ChildTrainer() {
                   <span className="result-accuracy-label">{getAccuracyLabel(result.accuracy)}</span>
                 </div>
                 <div className="result-icons">
-                  {result.accuracy >= 70 ? <CheckCircle2 size={32} color="#2ed573" /> : <XCircle size={32} color="#ff4757" />}
+                  {result.accuracy >= 70
+                    ? <CheckCircle2 size={32} color="#2ed573" />
+                    : <XCircle size={32} color="#ff4757" />}
                 </div>
               </div>
+
               <div className="result-body">
-                <p className="result-message">{result.message}</p>
+                {/* ── Transcription ──────────────────────────────────────── */}
                 {result.transcription && (
                   <div className="result-transcription">
                     <span className="result-label">{t('trainer.result.recognized')}</span>
                     <span className="result-value">"{result.transcription}"</span>
                   </div>
                 )}
-                {result.detected_errors && result.detected_errors.length > 0 && (
-                  <div className="result-errors">
-                    <span className="result-label">{t('trainer.result.errors')}</span>
-                    <ul>
-                      {result.detected_errors.map((err, i) => (
-                        <li key={i}>{err}</li>
+
+                {/* ── Phoneme comparison strip ───────────────────────────── */}
+                {result.phoneme_analysis && result.phoneme_analysis.target_phonemes.length > 0 && (
+                  <div className="phoneme-comparison">
+                    <div className="phoneme-row">
+                      <span className="phoneme-row-label">Цель</span>
+                      <div className="phoneme-chips">
+                        {result.phoneme_analysis.target_phonemes.map((ph, i) => {
+                          const hasError = result.phoneme_analysis!.phoneme_errors.some(
+                            e => e.target_phoneme === ph && e.operation !== 'insert'
+                          );
+                          return (
+                            <span key={i} className={`phoneme-chip target ${hasError ? 'phoneme-error' : 'phoneme-ok'}`}>
+                              {ph}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {result.phoneme_analysis.actual_phonemes.length > 0 && (
+                      <div className="phoneme-row">
+                        <span className="phoneme-row-label">Сказано</span>
+                        <div className="phoneme-chips">
+                          {result.phoneme_analysis.actual_phonemes.map((ph, i) => {
+                            const isExtra = result.phoneme_analysis!.phoneme_errors.some(
+                              e => e.actual_phoneme === ph && e.operation === 'insert'
+                            );
+                            const isWrong = result.phoneme_analysis!.phoneme_errors.some(
+                              e => e.actual_phoneme === ph && e.operation === 'substitute'
+                            );
+                            return (
+                              <span key={i} className={`phoneme-chip actual ${isExtra || isWrong ? 'phoneme-error' : 'phoneme-ok'}`}>
+                                {ph}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Disorders found ────────────────────────────────────── */}
+                {result.phoneme_analysis && result.phoneme_analysis.disorders_found.length > 0 && (
+                  <div className="disorders-section">
+                    <span className="result-label">Выявленные нарушения</span>
+                    {result.phoneme_analysis.disorders_found.map((d, i) => (
+                      <div key={i} className={`disorder-card disorder-${d.severity}`}>
+                        <div className="disorder-header">
+                          <span className="disorder-name">{d.disorder}</span>
+                          <span className={`severity-badge severity-${d.severity}`}>
+                            {d.severity === 'mild' ? 'Лёгкое' : d.severity === 'moderate' ? 'Среднее' : 'Тяжёлое'}
+                          </span>
+                        </div>
+                        <ul className="disorder-errors">
+                          {d.errors.map((e, j) => <li key={j}>{e}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Recommendations ────────────────────────────────────── */}
+                {result.phoneme_analysis && result.phoneme_analysis.recommendations.length > 0 && (
+                  <div className="recommendations-section">
+                    <span className="result-label">Рекомендации</span>
+                    <ul className="recommendations-list">
+                      {result.phoneme_analysis.recommendations.map((rec, i) => (
+                        <li key={i} className="recommendation-item">
+                          <span className="rec-bullet">💡</span>
+                          <span>{rec}</span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 )}
+
+                {/* ── Perfect result message ─────────────────────────────── */}
+                {result.accuracy === 100 && (
+                  <p className="result-message perfect">{result.message}</p>
+                )}
+
                 <div className="result-meta">
-                  <span className="result-meta-item">{t('trainer.result.goal')} <strong>{result.target_word}</strong></span>
-                  <span className="result-meta-item">{t('trainer.result.time')} <strong>{result.processing_time_ms}{t('trainer.result.ms')}</strong></span>
+                  <span className="result-meta-item">
+                    {t('trainer.result.goal')} <strong>{result.target_word}</strong>
+                  </span>
+                  <span className="result-meta-item">
+                    {t('trainer.result.time')} <strong>{result.processing_time_ms}{t('trainer.result.ms')}</strong>
+                  </span>
                 </div>
               </div>
+
               <button className="btn btn-primary try-again-btn" onClick={() => setResult(null)}>
                 <RefreshCw size={18} />
                 <span>{t('trainer.record.try_again')}</span>

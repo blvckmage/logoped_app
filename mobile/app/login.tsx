@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Radius, Typography } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { StarDecor } from '@/components/AnimalCharacters';
+import { BACKEND_URL } from '@/services/api';
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -81,8 +82,10 @@ export default function LoginScreen() {
     if (!email.trim()) { setError('Введите телефон или email'); return; }
     if (!password) { setError('Введите пароль'); return; }
     setError(null);
+    const loginValue = extractLogin(email);
+    console.log(`[Login] attempt: login="${loginValue}"`);
     try {
-      const user = await login(extractLogin(email), password);
+      const user = await login(loginValue, password);
       switch (user.role) {
         case 'therapist': router.replace('/therapist' as any); break;
         case 'parent': router.replace('/parent' as any); break;
@@ -91,6 +94,7 @@ export default function LoginScreen() {
         default: router.replace('/' as any);
       }
     } catch (err: any) {
+      console.error('[Login] failed:', err);
       setError(err.message || 'Неверный email или пароль');
     }
   };
@@ -181,6 +185,7 @@ export default function LoginScreen() {
             {error ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>⚠️ {error}</Text>
+                <Text style={styles.errorHint}>Сервер: {BACKEND_URL}</Text>
               </View>
             ) : null}
 
@@ -259,6 +264,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
   },
   errorText: { fontSize: 13, color: Colors.coralDark, lineHeight: 18 },
+  errorHint: { fontSize: 11, color: Colors.coralDark, opacity: 0.6, marginTop: 4 },
   loginButton: {
     backgroundColor: Colors.coral, borderRadius: Radius.lg, height: 58,
     justifyContent: 'center', alignItems: 'center',

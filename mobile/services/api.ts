@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Update this to your local machine IP when testing on a real device
-export const BACKEND_URL = 'http://172.20.10.2:8000';
+export const BACKEND_URL = 'http://127.0.0.1:8000';
 
 export type UserRole = 'superadmin' | 'admin' | 'therapist' | 'parent' | 'child';
 
@@ -144,16 +144,37 @@ async function request(endpoint: string, options: {
     config.body = body;
   }
 
+  const url = `${BACKEND_URL}${endpoint}`;
+  console.log(`[API] ${method} ${url}`);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    console.error(`[API] Timeout after 10s: ${url}`);
+  }, 10_000);
+
   let res: Response;
   try {
-    res = await fetch(`${BACKEND_URL}${endpoint}`, config);
-  } catch {
-    throw new Error(`Нет связи с сервером. Проверь что бэкенд запущен на ${BACKEND_URL}`);
+    res = await fetch(url, { ...config, signal: controller.signal });
+  } catch (networkErr: any) {
+    if (networkErr?.name === 'AbortError') {
+      throw new Error(`Сервер не отвечает 10 сек (${BACKEND_URL}). Проверь IP и что бэкенд запущен.`);
+    }
+    console.error(`[API] Network error for ${url}:`, networkErr);
+    throw new Error(`Нет связи с сервером (${BACKEND_URL}). Проверь IP и что бэкенд запущен.`);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(err.detail || err.message || `HTTP ${res.status}`);
+    let errBody: any;
+    try {
+      errBody = await res.json();
+    } catch {
+      errBody = { detail: `HTTP ${res.status} ${res.statusText}` };
+    }
+    console.error(`[API] HTTP ${res.status} from ${url}:`, errBody);
+    throw new Error(errBody.detail || errBody.message || `Ошибка сервера (HTTP ${res.status})`);
   }
   return res.json();
 }
@@ -170,6 +191,7 @@ function form(data: Record<string, any>): string {
 
 /** Login with phone number or email + password (works for all roles). */
 export function loginWithPhone(login: string, password: string) {
+  console.log(`[API] loginWithPhone: login="${login}", backend=${BACKEND_URL}`);
   return request('/auth/login/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
